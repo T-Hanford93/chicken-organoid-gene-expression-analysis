@@ -29,6 +29,12 @@ The analysis was performed using Python, including:
 
 # Results
 [to be published in manuscript]
+- Code will join and label data as well as check for data errors
+- It will categorise genes into groups, providing a consistent colour scheme. The example genes used in this code are: barrier_function; gut_hormone; nutrient_receptors; immune_response; nutrient_transporters; metabolism; oxidation and ref_genes.
+- Provides violin plots across gene categories for QC
+- Compares uninfected treatment groups and produces Venn diagrams of significantly differentially expressed genes (DEGs) and bar plots of unique DEGs.
+- Provides volcano plots of treated vs untreated groups in different conditions
+- Provides Venn diagrams of DEGs overlapping between treated groups within different conditions. For shared genes, it provides a scatterplot, and for unique DEGs it provides bar plots. 
 
-Author 
-Taylor R. Hanford, PhD. 
+Author
+Taylor R. Hanford, PhD
