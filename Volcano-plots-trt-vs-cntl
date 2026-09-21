@@ -1,0 +1,50 @@
+######### Significantly differentiated genes between infected and uninfected groups #########
+## note: this code references comparison groups determined in load-data-libraries-QC page
+  ## Therefore, if not done, be sure to copy that over. 
+
+#######################################################################################################################
+## Produces volcano plots showing the significant and relative expression of genes in infected and uninfected groups ##
+#######################################################################################################################
+
+
+def compare_treatment_groups(grp_a, grp_b, label=None, data=data_collapsed, genes=gene_cols, gene_map=gene_to_function, alpha=0.05, colors=("#E36116", "#0C62EB"), palette=function_group_palette):
+    results = []
+    for gene in genes:
+        group_a_vals = data.loc[data['Trt_group'] == grp_a, gene].dropna()
+        group_b_vals = data.loc[data['Trt_group'] == grp_b, gene].dropna()
+        stat, p = stats.ttest_ind(group_a_vals, group_b_vals, equal_var=True)
+        results.append({
+            'Gene': gene, 't_stat': stat, 'p_value': p,
+            'mean_grp_a': group_a_vals.mean(), 'mean_grp_b': group_b_vals.mean(),
+            'log2FC': group_a_vals.mean() - group_b_vals.mean(),
+            'n_grp_a': len(group_a_vals), 'n_grp_b': len(group_b_vals)
+        })
+
+    results_df = pd.DataFrame(results)
+    results_df['neg_log10_p'] = -np.log10(results_df['p_value'])
+    results_df['Function_group'] = results_df['Gene'].map(gene_map)
+    significant_genes = results_df[results_df['p_value'] < alpha]
+
+    plt.figure(figsize=(8,6))
+    sns.scatterplot(data=results_df, x='log2FC', y='neg_log10_p', hue='Function_group', palette=palette)
+    plt.axhline(-np.log10(alpha), color='black', linestyle='--', linewidth=1)
+    plt.axvline(0, color='grey', linestyle='--', linewidth=1)
+    plt.xlabel('Log2 Fold Change')
+    plt.ylabel('-Log10(P-Value)')
+    plt.title(label if label else f'Trt_group {grp_a} vs Trt_group {grp_b}')
+    plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+
+    texts = []
+    for _, row in significant_genes.iterrows():
+        texts.append(plt.text(row['log2FC'], row['neg_log10_p'], row['Gene'], fontsize=8))
+    adjust_text(texts, arrowprops=dict(arrowstyle='-', color='grey', lw=0.5))
+
+    plt.tight_layout()
+    plt.show()
+
+    return results_df, significant_genes
+
+all_results = {}
+for label, (grp_a, grp_b) in comparisons.items():
+    results_df, significant_genes = compare_treatment_groups(grp_a, grp_b, label=label)
+    all_results[label] = {'results_df': results_df, 'significant_genes': significant_genes}
