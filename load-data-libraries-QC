@@ -1,0 +1,106 @@
+#########################################################################################
+## DATA ANALYSIS OF NUTRITIONAL FLUIDIGM CHIP ##
+#########################################################################################
+
+#########################################################################################
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import numpy as np
+import math
+from scipy import stats
+from statsmodels.stats.multitest import multipletests
+from adjustText import adjust_text
+from matplotlib_venn import venn2, venn2_circles, venn3, venn3_circles
+from matplotlib.patches import Patch
+#########################################################################################
+
+## INITIAL DATA ##
+# Load data
+data = pd.read_csv(r"C:\Users\thanford\Desktop\RvH_24h_heatmap_log2_3.csv") # direct to your file (doesn't like the K drive)
+##Remember to edit the catalogue if sample names change, can do this easily with cntl + H
+
+##recheck top 20 rows
+data.head(10)
+
+#info on data
+data.describe()
+
+gene_cols = data.columns[1:-3]  # adjust slice to exclude PlateID, rep1, Trt_group, CNTLs we just want the gene columns here
+print(list(gene_cols))
+
+dup_check = data.groupby(['ImpWiz','PlateID'])[gene_cols].std().describe()
+print("number of duplicate values:", dup_check.sum().sum())
+
+#########################################################################################
+## Data processing ##
+#########################################################################################
+# define gene functional groups
+
+gene_functions = {
+    'barrier_function': ['CLDN1', 'CLDN2', 'CLDN3', 'CLDN4', 'CLDN5', 'OCLN', 'ZO1', 'ZO2', 'JAM2', 'JAM3', 'MUC2', 'MUC13', 'MUC5ac', 'CDX'],
+    'gut_hormone': ['GHRL', 'GLP1', 'GLP2B', 'GCG', 'TPH1', 'PYY'],
+    'nutrient_receptors': ['T1R1', 'T1R3', 'GRP43', 'GPR41', 'GPR120'],
+    'immune_response': ['IL6', 'IL8', 'IL10', 'IL18', 'IL22', 'IL1B', 'TLR2', 'TLR4', 'TNFA', 'AHSA1', 'AVBD6', 'AVBD9', 'HSPA4', 'IFNG', 'NOS2', 'PTGES', 'COX1', 'COX2', 'LOX12', 'CYP450'],
+    'nutrient_transporters': ['SLC15A1','SLC1A1','SLC1A4','SLC3A1','SLC7A9','SLC6A19','SLC7A1','SLC7A2','SLC7A5','SLC7A6','SLC7A7','SLC2A1','SLC2A2','SLC5A1','SLC2A5','SLC5A9','FABP','FABP1','FABP2','FABP6','SLC34A2','VDR','ATP1A1','SLC30A1','CALB1'],
+    'metabolism': ['COX16', 'EIF4EBP1', 'MTOR', 'RPS6KB1', 'GPX7', 'HIF1A'],
+    'oxidation': ['HMOX2', 'SOD1', 'XDH'],
+    'ref_genes': ['LBR', 'NDUFA', 'YWHAZ', 'GAPDH', '18S', 'BActin', 'UB', 'RPS7', 'B2M', 'GUSB', 'TBP', 'TUBAT', 'R28S']
+}
+
+#remove unstable reference genes
+
+#ref_genes = gene_functions.pop('ref_genes')
+#gene_cols = [g for g in gene_cols if g not in ref_genes]
+#print("number of ref genes removed:",len(ref_genes))  # sanity check - no ref genes
+#print("number of genes remaining:",len(gene_cols))  # sanity check - should drop by no ref genes
+
+
+gene_to_function = {gene: func for func, genes in gene_functions.items() for gene in genes}
+
+data_collapsed = data.groupby(
+    ['ImpWiz', 'PlateID', 'Trt_group', 'CNTLs'], as_index=False
+)[gene_cols].mean()
+
+long_data = data_collapsed.melt(
+    id_vars=['ImpWiz', 'PlateID', 'Trt_group', 'CNTLs'],
+    var_name='Gene',
+    value_name='log2_expression'
+)
+long_data['Function_group'] = long_data['Gene'].map(gene_to_function)
+
+unmapped = long_data.loc[long_data['Function_group'].isna(), 'Gene'].unique()
+print(unmapped)
+
+##define colour scheme for function groups
+function_group_palette = {
+    'barrier_function': "#02FEFE",
+    'gut_hormone': "#FD0303",
+    'nutrient_receptors': "#A95602",
+    'immune_response': "#FA03F2",
+    'nutrient_transporters': '#8172B2',
+    'metabolism': "#F7FF01",
+    'oxidation': "#0AA302",
+    'ref_genes': '#8C8C8C' ##only keep if keeping unstable ref genes in
+}
+#########################################################################################
+## Specify your comparisons ##
+#########################################################################################
+## Name groups here e.g. mine are comparing Hubbard and Ross breeds in various glucose conc.
+## Lower numbers are uninfected cntls e.g. 1 = cntl and 5 = infected
+
+comparisons = {
+    "Hubbard_FOM": (1,5), "Hubbard_100%": (2,6), "Hubbard_50%": (3,7), "Hubbard_0%": (4,8),
+    "Ross_FOM": (9,13), "Ross_100%": (10,14), "Ross_50%": (11,15), "Ross_0%": (12,16)
+}
+
+conditions = ['FOM', '100%', '50%', '0%']
+
+# build comparison_sets from comparisons, not hardcoded
+comparison_sets = [
+    (comparisons[f'Ross_{c}'], comparisons[f'Hubbard_{c}'], f'Ross {c}', f'Hubbard {c}')
+    for c in conditions
+]
+
+print(comparison_sets)  # sanity check before running the full loop
+print(comparisons[f'Hubbard_FOM'][1]) # check for specifics, change name and no if needed
