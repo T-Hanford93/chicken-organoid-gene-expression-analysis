@@ -1,0 +1,107 @@
+#######################################################################################################
+## Group comparison plots ##
+#######################################################################################################
+
+## This code compares the relative expression of significantly differentiated genes (DEGs) between infected groups in various medias
+### The aim of this was the final process comparing breeds infected with APEC in various media conditions
+#### This will produce a Venn diagram to show the number of DEGs, a scatterplot of the overlapping genes and bar plot of indiviually DEGs
+ 
+def compare_cross_group(pair1, pair2, label1, label2, data=data_collapsed, genes=gene_cols, gene_map=gene_to_function, alpha=0.05, colors=("#E36116", "#0C62EB"), palette=function_group_palette):
+    grp_a1, grp_b1 = pair1
+    grp_a2, grp_b2 = pair2
+
+    def run_ttest(grp_a, grp_b, suffix_a, suffix_b):
+        results = []
+        for gene in genes:
+            a_vals = data.loc[data['Trt_group'] == grp_a, gene].dropna()
+            b_vals = data.loc[data['Trt_group'] == grp_b, gene].dropna()
+            stat, p = stats.ttest_ind(a_vals, b_vals, equal_var=True)
+            results.append({
+                'Gene': gene, 't_stat': stat, 'p_value': p,
+                f'mean_{suffix_a}': a_vals.mean(), f'mean_{suffix_b}': b_vals.mean(),
+                'log2FC': a_vals.mean() - b_vals.mean(),
+                f'n_{suffix_a}': len(a_vals), f'n_{suffix_b}': len(b_vals)
+            })
+        df = pd.DataFrame(results)
+        df['neg_log10_p'] = -np.log10(df['p_value'])
+        df['Function_group'] = df['Gene'].map(gene_map)
+        return df
+
+    df1 = run_ttest(grp_a1, grp_b1, f'grp{grp_a1}', f'grp{grp_b1}')
+    df2 = run_ttest(grp_a2, grp_b2, f'grp{grp_a2}', f'grp{grp_b2}')
+
+    sig1 = df1[df1['p_value'] < alpha]
+    sig2 = df2[df2['p_value'] < alpha]
+    set1, set2 = set(sig1['Gene']), set(sig2['Gene'])
+    only1, only2, both = len(set1 - set2), len(set2 - set1), len(set1 & set2)
+
+    plt.figure(figsize=(6,6))
+    v = venn2(subsets=(1,1,1), set_labels=(label1, label2), set_colors=colors, alpha=0.7)
+    v.get_label_by_id('10').set_text(only1)
+    v.get_label_by_id('01').set_text(only2)
+    v.get_label_by_id('11').set_text(both)
+
+    for label in v.set_labels:
+        label.set_fontsize(14)
+    for subset_id in ('10', '01', '11'):
+        v.get_label_by_id(subset_id).set_fontsize(16)
+
+    venn2_circles(subsets=(1,1,1), linestyle='solid', linewidth=1.5, color='black')
+    plt.title(f'Significant genes: {label1} vs {label2}')
+    plt.tight_layout()
+    plt.show()
+
+    overlap_genes = set1 & set2
+    sig1_overlap = sig1[sig1['Gene'].isin(overlap_genes)]
+    sig2_overlap = sig2[sig2['Gene'].isin(overlap_genes)]
+    overlap_comparison = sig1_overlap[['Gene','log2FC']].merge(
+        sig2_overlap[['Gene','log2FC']], on='Gene', suffixes=(f'_{label1}', f'_{label2}')
+    )
+    overlap_comparison['Function_group'] = overlap_comparison['Gene'].map(gene_map)
+
+    plt.figure(figsize=(8,5))
+    sns.scatterplot(data=overlap_comparison, x=f'log2FC_{label1}', y=f'log2FC_{label2}', hue='Function_group', palette=palette)
+    plt.axvline(0, color='black', linewidth=1)
+    plt.axhline(0, color='black', linewidth=1)
+    plt.xlabel(f'Log2FC (Trt vs Cntl) - {label1}')
+    plt.ylabel(f'Log2FC (Trt vs Cntl) - {label2}')
+    plt.title(f'Overlapping significant genes: {label1} vs {label2}')
+    plt.legend(bbox_to_anchor=(1.02,1), loc='upper left')
+    texts = [plt.text(row[f'log2FC_{label1}'], row[f'log2FC_{label2}'], row['Gene'], fontsize=8) for _, row in overlap_comparison.iterrows()]
+    adjust_text(texts, arrowprops=dict(arrowstyle='-', color='grey', lw=0.5))
+    plt.tight_layout()
+    plt.show()
+
+    only1_df = sig1[sig1['Gene'].isin(set1 - set2)]
+    only2_df = sig2[sig2['Gene'].isin(set2 - set1)]
+
+    def plot_only_bar(plot_df, title):
+        if plot_df.empty:
+            print(f'No genes to plot for: {title}')
+            return
+        pd_sorted = plot_df[['Gene','log2FC','Function_group']].sort_values('log2FC')
+        bar_colors = [palette.get(fg, '#333333') for fg in pd_sorted['Function_group']]
+        fig, ax = plt.subplots(figsize=(7, max(4, len(pd_sorted)*0.3)))
+        ax.barh(pd_sorted['Gene'], pd_sorted['log2FC'], color=bar_colors, edgecolor='black')
+        ax.axvline(0, color='black', linewidth=1)
+        ax.set_xlabel('Log2 Fold Change')
+        ax.set_title(title)
+        legend_elements = [Patch(facecolor=c, label=fg) for fg, c in palette.items()]
+        ax.legend(handles=legend_elements, bbox_to_anchor=(1.02,1), loc='upper left', fontsize=8)
+        plt.tight_layout()
+        plt.show()
+
+    plot_only_bar(only1_df, f'Genes significant only in {label1}')
+    plot_only_bar(only2_df, f'Genes significant only in {label2}')
+
+    return df1, df2, sig1, sig2, overlap_comparison, only1_df, only2_df
+
+all_cross_group_results = {}
+
+for pair1, pair2, label1, label2 in comparison_sets:
+    print(f'\n===== {label1} vs {label2} =====')
+    df1, df2, sig1, sig2, overlap_comparison, only1_df, only2_df = compare_cross_group(pair1, pair2, label1, label2)
+    all_cross_group_results[(label1, label2)] = {
+        'df1': df1, 'df2': df2, 'sig1': sig1, 'sig2': sig2,
+        'overlap': overlap_comparison, 'only1': only1_df, 'only2': only2_df
+    }
