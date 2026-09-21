@@ -1,0 +1,105 @@
+## This script tests the difference in gene expression of the organoids between the different media conditions
+## Before this, load-data-libraries-QC should have been completed. If you have named your comparisons differently, they need to be changed here
+## The example used in this script is "Hubbard", and the media types are "FOM", "100", "50" and "0"
+
+## It performs a t.test comparing the different groups and produces a Venn diagram to show the individual and shared genes.
+## It also generates a bar plot showing uniquely significantly differentiated genes. 
+
+from matplotlib.patches import Patch
+
+def compare_media_types(grp_ref, grp_list, ref_label, grp_labels, data=data_collapsed, genes=gene_cols, gene_map=gene_to_function, alpha=0.05, palette=function_group_palette):
+
+    def run_ttest(grp_a, grp_b):
+        results = []
+        for gene in genes:
+            a_vals = data.loc[data['Trt_group'] == grp_a, gene].dropna()
+            b_vals = data.loc[data['Trt_group'] == grp_b, gene].dropna()
+            stat, p = stats.ttest_ind(a_vals, b_vals, equal_var=False)
+            results.append({
+                'Gene': gene, 't_stat': stat, 'p_value': p,
+                'mean_ref': a_vals.mean(), 'mean_alt': b_vals.mean(),
+                'log2FC': a_vals.mean() - b_vals.mean(),
+                'n_ref': len(a_vals), 'n_alt': len(b_vals)
+            })
+        df = pd.DataFrame(results)
+        df['neg_log10_p'] = -np.log10(df['p_value'])
+        df['Function_group'] = df['Gene'].map(gene_map)
+        return df
+
+    all_results = {}
+    sig_sets = {}
+
+    for grp, label in zip(grp_list, grp_labels):
+        df = run_ttest(grp_ref, grp)
+        sig = df[df['p_value'] < alpha]
+        all_results[label] = df
+        sig_sets[label] = set(sig['Gene'])
+        print(f'{label} vs {ref_label}: {len(sig)} significant genes')
+
+    labelA, labelB, labelC = grp_labels
+    setA, setB, setC = sig_sets[labelA], sig_sets[labelB], sig_sets[labelC]
+
+    only_A = len(setA - setB - setC)
+    only_B = len(setB - setA - setC)
+    only_C = len(setC - setA - setB)
+    AB_only = len((setA & setB) - setC)
+    AC_only = len((setA & setC) - setB)
+    BC_only = len((setB & setC) - setA)
+    ABC = len(setA & setB & setC)
+
+    plt.figure(figsize=(5,5))
+    v = venn3(subsets=(1,1,1,1,1,1,1), set_labels=(labelA, labelB, labelC), set_colors=('magenta', 'plum', 'thistle'), alpha=0.5)
+
+    region_ids = ['100', '010', '110', '001', '101', '011', '111']
+    region_values = [only_A, only_B, AB_only, only_C, AC_only, BC_only, ABC]
+    for region_id, value in zip(region_ids, region_values):
+        label_obj = v.get_label_by_id(region_id)
+        if label_obj is not None:
+            label_obj.set_text(value)
+
+    venn3_circles(subsets=(1,1,1,1,1,1,1), linestyle='solid', linewidth=1.5, color='black')
+    plt.title(f'Significant genes vs {ref_label} (media effect alone)')
+    plt.tight_layout()
+    plt.show()
+
+    # bar charts: genes significant ONLY in each group
+    def plot_only_bar(plot_df, title):
+        if plot_df.empty:
+            print(f'No genes to plot for: {title}')
+            return
+        pd_sorted = plot_df[['Gene','log2FC','Function_group']].sort_values('log2FC')
+        bar_colors = [palette.get(fg, '#333333') for fg in pd_sorted['Function_group']]
+        fig, ax = plt.subplots(figsize=(7, max(4, len(pd_sorted)*0.3)))
+        ax.barh(pd_sorted['Gene'], pd_sorted['log2FC'], color=bar_colors, edgecolor='black')
+        ax.axvline(0, color='black', linewidth=1)
+        ax.set_xlabel('Log2 Fold Change')
+        ax.set_title(title)
+        legend_elements = [Patch(facecolor=c, label=fg) for fg, c in palette.items()]
+        ax.legend(handles=legend_elements, bbox_to_anchor=(1.02,1), loc='upper left', fontsize=8)
+        plt.tight_layout()
+        plt.show()
+
+    only_A_df = all_results[labelA][all_results[labelA]['Gene'].isin(setA - setB - setC)]
+    only_B_df = all_results[labelB][all_results[labelB]['Gene'].isin(setB - setA - setC)]
+    only_C_df = all_results[labelC][all_results[labelC]['Gene'].isin(setC - setA - setB)]
+
+    plot_only_bar(only_A_df, f'Genes significant only in {labelA}')
+    plot_only_bar(only_B_df, f'Genes significant only in {labelB}')
+    plot_only_bar(only_C_df, f'Genes significant only in {labelC}')
+
+    return all_results, sig_sets, only_A_df, only_B_df, only_C_df
+
+
+media_conditions = ['100%', '50%', '0%']
+grp_ref = comparisons['Hubbard_FOM'][1]
+grp_list = [comparisons[f'Hubbard_{c}'][1] for c in media_conditions]
+grp_labels = ['100% Glucose', '50% Glucose', '0% Glucose']
+
+all_results, sig_sets, only_100_df, only_50_df, only_0_df = compare_media_types(
+    grp_ref=grp_ref,
+    grp_list=grp_list,
+    ref_label='FOM',
+    grp_labels=grp_labels
+)
+
+print(sig_sets)
