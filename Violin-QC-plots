@@ -1,0 +1,32 @@
+#########################################################################################
+## Violin plots for QC of gene functional groups ##
+#########################################################################################
+
+## note: load-data-libraries-QC step must first be completed
+
+## Violin plots per gene category - look here for odd data e.g. do non-treatments have an immune response
+def plot_function_groups(trt_group, data=long_data, groups=gene_functions):
+    for func_group in groups.keys():
+        subset = data[(data['Trt_group'] == trt_group) & (data['Function_group'] == func_group)]
+        if subset.empty:
+            continue
+        plt.figure(figsize=(8,4))
+        sns.violinplot(data=subset, x='Gene', y='log2_expression', color='magenta', inner='point')
+        plt.axhline(0, color='grey', linestyle='--', linewidth=1)
+        plt.xticks(rotation=90)
+        plt.title(f'{func_group} — Trt_group {trt_group}')
+        plt.tight_layout()
+        plt.show()
+
+# derive all individual Trt_group numbers from the comparisons dict, rather than hardcoding
+all_trt_groups = sorted({grp for pair in comparisons.values() for grp in pair})
+print(all_trt_groups)  # sanity check - should print [1, 2, ..., 16]
+
+for trt_group in all_trt_groups:  # plot for all treatment groups
+    plot_function_groups(trt_group=trt_group)
+
+#########################################################################################
+## to print individual groups, example ##
+#########################################################################################
+for trt_group in [9, 10, 11, 12, 13, 14, 15, 16]:  # only plot for Ross treatment groups - change numbers if yours differ
+    plot_function_groups(trt_group=trt_group)
