@@ -17,11 +17,8 @@ from matplotlib.patches import Patch
 
 ## INITIAL DATA ##
 # Load data
-data = pd.read_csv(r"C:\Users\thanford\Desktop\RvH_24h_heatmap_log2_3.csv") # direct to your file (doesn't like the K drive)
-##Remember to edit the catalogue if sample names change, can do this easily with cntl + H
-
-##recheck top 20 rows
-data.head(10)
+data = pd.read_csv(r"YOUR_FILE_LOCATION") # direct to your file
+## Remember to edit the catalogue if sample names change, can do this easily with cntl + H
 
 #info on data
 data.describe()
