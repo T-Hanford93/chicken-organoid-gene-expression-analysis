@@ -34,6 +34,7 @@ def compare_treatment_groups(grp_a, grp_b, label=None, data=data_collapsed, gene
     plt.title(label if label else f'Trt_group {grp_a} vs Trt_group {grp_b}')
     plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
 
+## label gene names automatically
     texts = []
     for _, row in significant_genes.iterrows():
         texts.append(plt.text(row['log2FC'], row['neg_log10_p'], row['Gene'], fontsize=8))
